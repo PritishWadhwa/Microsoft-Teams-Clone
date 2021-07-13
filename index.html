@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MS Teams Clone</title>
+    <link href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/8.7.0/firebase-app.js"></script>
+
+    <!-- If you enabled Analytics in your project, add the Firebase SDK for Analytics -->
+    <script src="https://www.gstatic.com/firebasejs/8.7.0/firebase-analytics.js"></script>
+
+    <!-- Add Firebase products that you want to use -->
+    <script src="https://www.gstatic.com/firebasejs/8.7.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.7.0/firebase-firestore.js"></script>
+    <script>
+        // TODO: Replace the following with your app's Firebase project configuration
+        // For Firebase JavaScript SDK v7.20.0 and later, `measurementId` is an optional field
+        var firebaseConfig = {
+            apiKey: "AIzaSyD6dUuBOqaOU68RO1sGOiC6BCRu6OYu-cQ",
+            authDomain: "ms-teams-clone-fc32b.firebaseapp.com",
+            projectId: "ms-teams-clone-fc32b",
+            storageBucket: "ms-teams-clone-fc32b.appspot.com",
+            messagingSenderId: "1033130262415",
+            appId: "1:1033130262415:web:1cbbb700b013619bc5d5fa",
+            measurementId: "G-6BCJT8YQ0D"
+        };
+
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        var selectedGroupName = "";
+
+        // detecting the change in user state
+        firebase.auth().onAuthStateChanged((user) => {
+            if (user) {
+
+                // user details
+                const user = firebase.auth().currentUser;
+                const yourName = user.displayName;
+                sessionStorage.setItem('username', yourName);
+                var uid = user.uid;
+                var db = firebase.firestore();
+
+                // user groups
+                var currGroups = [];
+                db.collection("profiles").doc(uid).onSnapshot((doc) => {
+                    const data = doc.data();
+                    const sideNav = document.getElementById("side-nav");
+
+                    // displying the groups the user is a part of 
+                    data.groups.forEach(group => {
+                        if (!currGroups.includes(group)) {
+                            let newGroupButton = document.createElement("button");
+                            newGroupButton.className =
+                                "w-full flex items-center p-2 my-6 transition-colors hover:text-white hover:bg-gray-600 duration-200  text-gray-400 rounded-lg";
+                            newGroupButton.setAttribute("id", group);
+                            newGroupButton.setAttribute("onclick",
+                                "changeSelectedGroup(this.id)");
+                            let newSpan = document.createElement("span");
+                            newSpan.className = "mx-4 text-lg font-normal";
+                            newSpan.innerText = group;
+                            newGroupButton.appendChild(newSpan);
+                            sideNav.appendChild(newGroupButton);
+                            currGroups.push(group);
+                        }
+                    });
+                    if (selectedGroupName === "") {
+                        changeSelectedGroup("Chatroom");
+                    }
+                });
+            } else {
+                window.location.replace('/signIn.html');
+            }
+        });
+
+        // starting the meet from the groups/ chatroom
+        function startMeet() {
+            const user = firebase.auth().currentUser;
+            const roomName = selectedGroupName;
+            const yourName = user.displayName;
+            sessionStorage.setItem('username', yourName);
+            window.location = `${window.location}videoCall.html?room=${roomName}`;
+        }
+
+
+        // logging out of the system
+        function logout() {
+            firebase.auth().signOut();
+        }
+        var unsubscribe;
+
+        // selecting some other group
+        function changeSelectedGroup(groupName) {
+            if (selectedGroupName !== "") {
+                const prevButton = document.getElementById(selectedGroupName);
+                prevButton.classList.remove("bg-gray-900");
+            }
+            if (selectedGroupName !== groupName) {
+                selectedGroupName = groupName;
+                const button = document.getElementById(groupName);
+                button.classList.add("bg-gray-900");
+                if (unsubscribe) {
+                    unsubscribe();
+                }
+                const db = firebase.firestore();
+                const user = firebase.auth().currentUser;
+                const nameElement = document.getElementById('group-name');
+                nameElement.innerText = groupName;
+
+                // displaying the participant list in the groups
+                if (groupName === "Chatroom") {
+                    document.getElementById("participants").innerText = "Open for all";
+                } else {
+                    db.collection("groups").doc(groupName).get().then((doc) => {
+                        if (doc.exists) {
+                            const participants = doc.data().participants;
+                            var participantString = participants.join(', ');
+                            document.getElementById("participants").innerText = participantString;
+                        }
+                    });
+                }
+
+                // displying the chats in a group
+                document.getElementById("group-controls").classList.remove("hidden");
+                document.getElementById("msg-form").classList.remove("hidden");
+                var e = document.getElementById("msgs-div");
+                var child = e.lastElementChild;
+                while (child) {
+                    e.removeChild(child);
+                    child = e.lastElementChild;
+                }
+                var ref;
+                if (selectedGroupName === "Chatroom") {
+                    ref = db.collection("messages");
+                } else {
+                    ref = db.collection("groups").doc(selectedGroupName).collection("messages");
+                }
+
+                unsubscribe = ref.orderBy('createdAt').onSnapshot((querySnapshot) => {
+                    querySnapshot.docChanges().forEach((doc) => {
+                        if (doc.type === "added") {
+                            let newMsg = document.createElement('div');
+                            newMsg.className = 'flex items-center';
+                            if (user.uid === doc.doc.data().uid) {
+                                newMsg.className += ' flex-row-reverse';
+                            }
+                            let senderImg = document.createElement('img');
+                            senderImg.src = doc.doc.data().photoURL;
+                            senderImg.className = "rounded-full w-8 mx-1 my-1";
+                            let msgText = document.createElement('p');
+                            msgText.className =
+                                "self-end relative mb-3 text-center px-2.5 py-5 rounded-xl";
+                            msgText.innerText = doc.doc.data().text;
+                            if (user.uid === doc.doc.data().uid) {
+                                msgText.className += ' text-white bg-gray-600';
+                            } else {
+                                msgText.className += ' text-black bg-gray-100';
+                            }
+                            newMsg.appendChild(senderImg);
+                            newMsg.appendChild(msgText);
+                            document.getElementById('msgs-div').appendChild(newMsg);
+
+                            const elem = document.getElementById("bottom");
+                            elem.scrollIntoView({
+                                behavior: "smooth"
+                            });
+                        }
+                    });
+                });
+            }
+        }
+
+        // sending messages in chat
+        window.addEventListener('load', function() {
+            var form = document.getElementById('msg-form');
+
+            function sendMessage(e) {
+                e.preventDefault();
+                if (selectedGroupName !== "") {
+                    var value = document.getElementById('input').value;
+                    firebase.auth().onAuthStateChanged((user) => {
+                        if (user && value.length > 0) {
+                            const {
+                                uid,
+                                photoURL
+                            } = user;
+                            var db = firebase.firestore();
+                            var ref;
+                            if (selectedGroupName === "Chatroom") {
+                                ref = db.collection("messages");
+                            } else {
+                                ref = db.collection("groups").doc(selectedGroupName).collection(
+                                    "messages");
+                            }
+                            ref.add({
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                text: value,
+                                uid,
+                                photoURL,
+                            }).then((docRef) => {});
+                            document.getElementById('input').value = "";
+                        }
+                    });
+                }
+            }
+            form.addEventListener('submit', sendMessage);
+        });
+        window.onhashchange = unsubscribe;
+    </script>
+
+    <script>
+        function expandMenu() {
+            document.getElementById('sidebar').classList.toggle('hidden');
+        }
+        window.addEventListener('load', function() {
+            if (selectedGroupName === "") {
+                document.getElementById("group-controls").classList.add("hidden");
+                document.getElementById("msg-form").classList.add("hidden");
+            }
+            const card_open = document.getElementById('card_open')
+            const card_close = document.getElementById('card_close')
+            const card_panel = document.getElementById('card_panel')
+
+            function modalState() {
+                if (card_panel.classList.contains('hidden')) {
+                    // Show modal
+                    card_panel.classList.remove('hidden')
+                    card_panel.classList.add('block')
+
+                    // Delete button
+                    card_open.classList.add('hidden')
+                    card_open.classList.remove('block')
+
+                    // Start animation open
+                    card_panel.classList.add('card_open');
+                    const user = firebase.auth().currentUser;
+                    const db = firebase.firestore();
+                    db.collection("users").doc("users").get().then((doc) => {
+                        if (doc.exists) {
+                            const data = doc.data();
+                            data.users.forEach(element => {
+                                if (element.email !== user.email) {
+                                    const parentDiv = document.createElement("div");
+                                    const checkBox = document.createElement("input");
+                                    checkBox.setAttribute("type", "checkbox");
+                                    checkBox.setAttribute("id", element.email);
+                                    checkBox.setAttribute("name", element.email);
+                                    checkBox.className = "form-checkbox";
+                                    const span = document.createElement("span");
+                                    span.className = "ml-2";
+                                    span.innerText = element.email;
+                                    const label = document.createElement("label");
+                                    label.className = "inline-flex items-center";
+                                    label.appendChild(checkBox);
+                                    label.appendChild(span);
+                                    parentDiv.appendChild(label);
+                                    const form = document.getElementById("search-friends");
+                                    form.appendChild(parentDiv);
+                                }
+                            });
+                        }
+                    });
+                } else {
+                    // Delete modal
+                    card_panel.classList.add('hidden')
+                    card_panel.classList.remove('block')
+
+                    // Show button
+                    card_open.classList.remove('hidden')
+                    card_open.classList.add('block')
+
+                    // Remove animation open
+                    card_panel.classList.remove('card_open')
+                }
+            }
+            const form = document.getElementById('search-friends');
+
+            // create new group
+
+
+
+            function createGroup(e) {
+                e.preventDefault();
+                const formData = new FormData(form);
+                var selectedEmails = [];
+                var groupName;
+                for (var pair of formData.entries()) {
+                    if (!groupName) {
+                        groupName = pair[1];
+                    } else {
+                        selectedEmails.push(pair[0]);
+                    }
+                }
+                // checking if everything is provided or not
+                if (!groupName) {
+                    console.log('No groupname');
+                }
+                if (!selectedEmails.length) {
+                    console.log('No emails');
+                }
+                if (groupName && selectedEmails.length) {
+                    const db = firebase.firestore();
+                    db.collection("groups").doc(groupName).get().then((doc) => {
+                        if (!doc.exists) {
+                            const user = firebase.auth().currentUser;
+                            selectedEmails.push(user.email);
+                            db.collection("groups").doc(groupName).set({
+                                groupname: groupName,
+                                participants: selectedEmails,
+                                meetHappening: false,
+                                chats: [],
+                            }).then((docRef) => {
+                                db.collection("users").doc("users").get().then((doc) => {
+                                    if (doc.exists) {
+                                        const users = doc.data().users;
+                                        users.forEach(user => {
+                                            if (selectedEmails.includes(user
+                                                    .email)) {
+                                                db.collection("profiles").doc(
+                                                    user.uid).update({
+                                                    groups: firebase
+                                                        .firestore
+                                                        .FieldValue
+                                                        .arrayUnion(
+                                                            groupName),
+                                                }).then((docRef) => {});
+                                            }
+                                        });
+                                    }
+                                });
+                                modalState();
+                            });
+                        } else {
+                            console.log("group already exists");
+                        }
+                    });
+                }
+            }
+            form.addEventListener('submit', createGroup);
+            card_open.addEventListener('click', modalState)
+            card_close.addEventListener('click', modalState)
+        });
+    </script>
+
+    <style>
+        .card_open {
+            animation-duration: 2s;
+            animation-name: card_open;
+        }
+        
+        @keyframes card_open {
+            from {
+                height: 1%;
+                box-shadow: var(--shadow);
+            }
+            to {
+                height: 100%;
+                box-shadow: var(--ring-offset-shadow, 0 0 #0000), var(--ring-shadow, 0 0 #0000), var(--shadow);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="card_panel" class="main-modal fixed w-full inset-0 z-50 overflow-hidden flex justify-center items-center hidden">
+        <div class="modal-container bg-white w-4/12 md:max-w-11/12 mx-auto rounded-xl z-50 overflow-y-auto">
+            <div class="modal-content py-4 text-left px-6">
+                <div class="flex justify-between items-center pb-3">
+                    <p class="text-2xl font-bold text-gray-500">Add Friends to group</p>
+                    <div id="card_close" class="modal-close cursor-pointer z-50">
+                        <svg class="fill-current text-gray-500" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
+                                <path
+                                      d="M14.53 4.53l-1.06-1.06L9 7.94 4.53 3.47 3.47 4.53 7.94 9l-4.47 4.47 1.06 1.06L9 10.06l4.47 4.47 1.06-1.06L10.06 9z">
+                                </path>
+                            </svg>
+                    </div>
+                </div>
+
+                <div class="my-5 mr-5 ml-5 flex justify-center">
+                    <form class="w-full max-w-sm mx-auto top-10" id="search-friends">
+                        <div class="md:flex md:items-center mb-6">
+                            <div class="md:w-1/3">
+                                <label class="block text-gray-900 font-bold md:text-right mb-1 md:mb-0 pr-4" for="room-name">
+                                        Group name
+                                    </label>
+                            </div>
+                            <div class="md:w-2/3">
+                                <input class="bg-gray-200 appearance-none border-2 border-gray-200 rounded w-full py-2 px-4 text-gray-700 leading-tight focus:outline-none focus:bg-white focus:border-purple-500" id='create-group' name="groupName" type="text" value="" placeholder="">
+                            </div>
+                        </div>
+                        <div class="md:flex md:items-center">
+                            <div class="md:w-1/3"></div>
+                            <div class="md:w-2/3">
+                                <button class="shadow bg-purple-500 hover:bg-purple-400 focus:shadow-outline focus:outline-none text-white font-bold py-2 px-4 rounded" type="submit">
+                                        Create group
+                                    </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div>
+        <Nav class="bg-gray-800">
+            <div class="mx-6">
+                <div class="flex items-center justify-between h-24 flex-wrap">
+                    <div class="flex items-center">
+                        <div class="text-white md:hidden">
+                            <button onclick="expandMenu()">
+                                    <svg viewBox="0 0 100 80"
+                                         width="40"
+                                         height="20"
+                                         style="fill:#FFF">
+                                        <rect width="100"
+                                              height="20"
+                                              rx="8"></rect>
+                                        <rect y="30"
+                                              width="100"
+                                              height="20"
+                                              rx="8"></rect>
+                                        <rect y="60"
+                                              width="100"
+                                              height="20"
+                                              rx="8"></rect>
+                                    </svg>
+                                </button>
+                        </div>
+                        <div class="flex-shrink-0">
+                            <img class="h-8 w-8" src="https://upload.wikimedia.org/wikipedia/commons/c/c9/Microsoft_Office_Teams_%282018%E2%80%93present%29.svg" alt="Workflow" />
+                        </div>
+                    </div>
+                    <div class="flex justify-around items-center flex-row-reverse">
+                        <button onclick="logout()" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout</button>
+                        <a href="https://calendar.google.com/" target="_blank" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Calender</a>
+                        <a class="bg-gray-900 text-white px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                    </div>
+                </div>
+            </div>
+        </Nav>
+    </div>
+
+    <div class="flex overflow-auto">
+        <div class="static filter drop-shadow-xl md:relative z-10 bg-gray-800 hidden md:block md:flex fixed float-left" style="height: calc(100vh - 
+    6rem);" id="sidebar">
+            <div class="flex flex-col sm:flex-row sm:justify-around">
+                <div class="w-72 overflow-auto">
+                    <div class="flex items-center justify-start mx-6 mt-10">
+                        <img class="h-10" src="https://www.tailwind-kit.com/icons/rocket.svg" />
+                        <span class="text-gray-300 ml-4 text-2xl font-bold">
+                                Groups
+                            </span>
+                    </div>
+                    <nav class="mt-10 px-6">
+                        <button class="w-full hover:text-gray-700 hover:bg-gray-200 flex items-center p-2 my-6 transition-colors dark:hover:text-white dark:hover:bg-gray-600 duration-200  text-gray-800 dark:text-gray-100 rounded-lg bg-gray-100 dark:bg-gray-600" id="card_open">
+                                <span class="mx-4 text-lg font-normal">
+                                    Create group
+                                </span>
+                                <span class="flex-grow text-right">
+                                </span>
+                            </button>
+                        <div id="side-nav">
+
+                        </div>
+                    </nav>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col float-none w-full m-4 bg-gray-300 z-0" style="height: calc(100vh - 8rem)">
+            <div class="bg-gray-800 w-full p-4 text-gray-100 flex justify-between">
+                <div class="flex flex-col">
+                    <span id="group-name"></span>
+                    <span id="participants" class="text-xs"></span>
+                </div>
+                <div class="flex justify-around">
+                    <button onclick="startMeet()" id="group-controls" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                            Join meet
+                        </button>
+                </div>
+            </div>
+            <div class="flex flex-col relative overflow-auto h-screen overflow-auto float-left pr-4 pt-2 pl-2 scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-gray-100">
+                <div id="msgs-div"></div>
+                <span id="bottom"></span>
+            </div>
+            <form id="msg-form" class="static bottom-0 flex items-stretch w-full" value="">
+
+                <input value='' id="input" placeholder="say something nice" class="px-2 py-2 w-5/6 bg-gray-100" style="border: 1px solid gray;" />
+
+                <button type="submit" class="inline-block text-xs sm:text-base text-white text-center bg-gray-800 hover:bg-gray-600 w-1/6">Submit</button>
+
+            </form>
+        </div>
+    </div>
+</body>
+
+</html>

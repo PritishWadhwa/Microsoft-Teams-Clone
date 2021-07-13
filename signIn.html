@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In</title>
+    <link href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <script src="https://www.gstatic.com/firebasejs/8.7.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.7.0/firebase-analytics.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.7.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.7.0/firebase-firestore.js"></script>
+    <script>
+        var firebaseConfig = {
+            apiKey: "AIzaSyD6dUuBOqaOU68RO1sGOiC6BCRu6OYu-cQ",
+            authDomain: "ms-teams-clone-fc32b.firebaseapp.com",
+            projectId: "ms-teams-clone-fc32b",
+            storageBucket: "ms-teams-clone-fc32b.appspot.com",
+            messagingSenderId: "1033130262415",
+            appId: "1:1033130262415:web:1cbbb700b013619bc5d5fa",
+            measurementId: "G-6BCJT8YQ0D"
+        };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        var provider = new firebase.auth.GoogleAuthProvider();
+
+        function signInWithGoogle() {
+            firebase.auth()
+                .signInWithPopup(provider)
+                .then((result) => {
+                    /** @type {firebase.auth.OAuthCredential} */
+                    var credential = result.credential;
+
+                    // This gives you a Google Access Token. You can use it to access the Google API.
+                    var token = credential.accessToken;
+                    // The signed-in user info.
+                    var user = result.user;
+                    if (user) {
+                        const userObj = {
+                            uid: user.uid,
+                            email: user.email,
+                        };
+                        var db = firebase.firestore();
+                        db.collection("users").doc("users").update({
+                            users: firebase.firestore.FieldValue.arrayUnion(userObj),
+                        }).then((docRef) => {
+                            db.collection("profiles").doc(user.uid).get().then((doc) => {
+                                if (!doc.exists) {
+                                    db.collection("profiles").doc(user.uid).set({
+                                        groups: ["Chatroom"],
+                                    }, {
+                                        merge: true
+                                    }).then((docRef) => {});
+                                }
+                                window.location.replace('/');
+                            });
+                        }).catch((error) => {
+                            db.collection("users").doc("users").set({
+                                users: [userObj],
+                            }).then((docRef) => {
+                                db.collection("profiles").doc(user.uid).get().then((doc) => {
+                                    if (!doc.exists) {
+                                        db.collection("profiles").doc(user.uid).set({
+                                            groups: ["Chatroom"],
+                                        }, {
+                                            merge: true
+                                        }).then((docRef) => {});
+                                    }
+                                    window.location.replace('/');
+                                });
+                            })
+                        });
+                    }
+                    // ...
+                }).catch((error) => {
+                    // Handle Errors here.
+                    var errorCode = error.code;
+                    var errorMessage = error.message;
+                    // The email of the user's account used.
+                    var email = error.email;
+                    // The firebase.auth.AuthCredential type that was used.
+                    var credential = error.credential;
+                    // ...
+                });
+        }
+    </script>
+    <div>
+        <Nav class="bg-gray-800">
+            <div class="mx-6">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <img class="h-8 w-8" src="https://upload.wikimedia.org/wikipedia/commons/c/c9/Microsoft_Office_Teams_%282018%E2%80%93present%29.svg" alt="Workflow" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Nav>
+    </div>
+    <section class="text-gray-600 body-font">
+        <div class="container mx-auto flex px-5 py-24 items-center justify-center flex-col">
+            <img class="lg:w-2/6 md:w-3/6 w-5/6 mb-10 object-cover object-center rounded" alt="hero" src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" />
+            <div class="text-center lg:w-2/3 w-full">
+                <h1 class="title-font sm:text-4xl text-3xl mb-4 font-medium text-gray-900">MS Teams
+                </h1>
+                <p class="mb-8 leading-relaxed">MS Teams clone which probably supports more number of features than MS Teams itself!</p>
+                <div class="flex justify-center">
+                    <button onclick="signInWithGoogle()" class="inline-flex text-white bg-red-500 border-0 py-2 px-6 focus:outline-none hover:bg-red-600 rounded text-lg">
+                            Sign in with Google
+                        </button>
+                </div>
+            </div>
+        </div>
+    </section>
+</body>
+
+</html>
